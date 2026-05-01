@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wumpus Logic Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #080c10;
+    --panel: #0d1520;
+    --border: #1a3a5c;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --safe: #00ff88;
+    --danger: #ff3333;
+    --unknown: #1a2a3a;
+    --visited: #0a3a5c;
+    --agent: #ffdd00;
+    --wumpus: #ff3333;
+    --pit: #8833ff;
+    --text: #c8e6ff;
+    --dim: #4a6a8a;
+    --gold: #ffd700;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  header {
+    background: linear-gradient(135deg, #0d1520 0%, #061018 100%);
+    border-bottom: 2px solid var(--accent);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 0 30px rgba(0,212,255,0.2);
+  }
+
+  header h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,212,255,0.7);
+    letter-spacing: 2px;
+  }
+
+  .subtitle {
+    font-size: 0.7rem;
+    color: var(--dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--safe);
+    box-shadow: 0 0 10px var(--safe);
+    animation: pulse 1.5s infinite;
+    margin-left: auto;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    gap: 0;
+    height: calc(100vh - 70px);
+  }
+
+  .side-panel {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .side-panel.right {
+    border-right: none;
+    border-left: 1px solid var(--border);
+  }
+
+  .panel-header {
+    background: rgba(0,212,255,0.05);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .panel-body {
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .control-group {
+    margin-bottom: 20px;
+  }
+
+  .control-label {
+    font-size: 0.65rem;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  input[type="number"] {
+    background: rgba(0,212,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    width: 70px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input[type="number"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(0,212,255,0.3);
+  }
+
+  .btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border: 1px solid;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .btn-primary {
+    background: rgba(0,212,255,0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: rgba(0,212,255,0.25);
+    box-shadow: 0 0 15px rgba(0,212,255,0.4);
+  }
+
+  .btn-success {
+    background: rgba(0,255,136,0.1);
+    border-color: var(--safe);
+    color: var(--safe);
+  }
+
+  .btn-success:hover:not(:disabled) {
+    background: rgba(0,255,136,0.2);
+    box-shadow: 0 0 15px rgba(0,255,136,0.4);
+  }
+
+  .btn-warning {
+    background: rgba(255,107,53,0.1);
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+
+  .btn-warning:hover:not(:disabled) {
+    background: rgba(255,107,53,0.2);
+    box-shadow: 0 0 15px rgba(255,107,53,0.4);
+  }
+
+  .btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .speed-control {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .speed-btn {
+    flex: 1;
+    min-width: 50px;
+    font-size: 0.6rem;
+    padding: 6px 4px;
+  }
+
+  .speed-btn.active {
+    background: rgba(0,212,255,0.3) !important;
+    box-shadow: 0 0 10px rgba(0,212,255,0.5) !important;
+  }
+
+  /* Center grid area */
+  .grid-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: radial-gradient(ellipse at center, #0d1a26 0%, #080c10 70%);
+    overflow: auto;
+  }
+
+  #grid-container {
+    display: inline-grid;
+    gap: 3px;
+    padding: 12px;
+    background: rgba(0,212,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 0 40px rgba(0,212,255,0.1), inset 0 0 40px rgba(0,0,0,0.5);
+  }
+
+  .cell {
+    width: 60px;
+    height: 60px;
+    border: 1px solid rgba(26,58,92,0.6);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    position: relative;
+    transition: all 0.3s ease;
+    cursor: default;
+    background: var(--unknown);
+    overflow: hidden;
+  }
+
+  .cell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .cell.safe {
+    background: rgba(0,255,136,0.12);
+    border-color: rgba(0,255,136,0.4);
+    box-shadow: 0 0 10px rgba(0,255,136,0.2), inset 0 0 10px rgba(0,255,136,0.05);
+  }
+
+  .cell.visited {
+    background: rgba(0,100,180,0.2);
+    border-color: rgba(0,212,255,0.3);
+  }
+
+  .cell.danger {
+    background: rgba(255,51,51,0.15);
+    border-color: rgba(255,51,51,0.5);
+    box-shadow: 0 0 10px rgba(255,51,51,0.3);
+  }
+
+  .cell.agent-here {
+    background: rgba(255,221,0,0.15);
+    border-color: rgba(255,221,0,0.6);
+    box-shadow: 0 0 15px rgba(255,221,0,0.4);
+    animation: agent-glow 1s infinite alternate;
+  }
+
+  @keyframes agent-glow {
+    from { box-shadow: 0 0 10px rgba(255,221,0,0.3); }
+    to { box-shadow: 0 0 20px rgba(255,221,0,0.6); }
+  }
+
+  .cell .cell-label {
+    font-size: 0.45rem;
+    color: var(--dim);
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    letter-spacing: 0.5px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .cell .percepts {
+    font-size: 0.5rem;
+    position: absolute;
+    bottom: 3px;
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0 2px;
+  }
+
+  .percept-tag {
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-size: 0.45rem;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .percept-breeze { background: rgba(0,150,255,0.3); color: #66ccff; border: 1px solid rgba(0,150,255,0.4); }
+  .percept-stench { background: rgba(180,0,255,0.3); color: #cc88ff; border: 1px solid rgba(180,0,255,0.4); }
+  .percept-gold { background: rgba(255,215,0,0.3); color: #ffd700; border: 1px solid rgba(255,215,0,0.4); }
+
+  /* Metrics */
+  .metric-card {
+    background: rgba(0,212,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .metric-title {
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .metric-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.6rem;
+    color: var(--accent);
+    font-weight: 700;
+    text-shadow: 0 0 15px rgba(0,212,255,0.5);
+  }
+
+  .metric-sub {
+    font-size: 0.6rem;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+
+  /* KB Log */
+  .kb-log {
+    height: 180px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 0.6rem;
+    line-height: 1.6;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .kb-entry { margin-bottom: 3px; }
+  .kb-tell { color: #88ccff; }
+  .kb-ask { color: #88ff88; }
+  .kb-infer { color: #ffcc88; }
+  .kb-safe { color: var(--safe); }
+  .kb-danger { color: var(--danger); }
+  .kb-move { color: var(--accent); }
+  .kb-system { color: var(--dim); font-style: italic; }
+  .kb-win { color: var(--gold); font-weight: bold; }
+  .kb-dead { color: var(--danger); font-weight: bold; }
+
+  /* Agent status */
+  .agent-status {
+    background: rgba(255,221,0,0.05);
+    border: 1px solid rgba(255,221,0,0.2);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 0.7rem;
+  }
+
+  .status-key { color: var(--dim); }
+  .status-val { color: var(--text); font-weight: bold; }
+  .status-val.active { color: var(--safe); text-shadow: 0 0 8px var(--safe); }
+  .status-val.dead { color: var(--danger); }
+  .status-val.won { color: var(--gold); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.6rem;
+    color: var(--dim);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+
+  /* Inference steps list */
+  .inference-list {
+    height: 160px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 0.6rem;
+    line-height: 1.7;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .inf-step { color: #ffcc66; }
+  .inf-resolve { color: #cc88ff; }
+  .inf-contra { color: var(--safe); }
+
+  /* Overlay message */
+  .overlay-msg {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(8,12,16,0.95);
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 24px 32px;
+    text-align: center;
+    z-index: 100;
+    box-shadow: 0 0 40px rgba(0,212,255,0.3);
+    display: none;
+  }
+
+  .overlay-msg h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+  }
+
+  .overlay-msg.win h2 { color: var(--gold); text-shadow: 0 0 20px var(--gold); }
+  .overlay-msg.dead h2 { color: var(--danger); text-shadow: 0 0 20px var(--danger); }
+
+  .overlay-msg p {
+    font-size: 0.75rem;
+    color: var(--dim);
+    margin-bottom: 16px;
+  }
+
+  .grid-wrapper {
+    position: relative;
+  }
+
+  /* Percepts display */
+  .percept-display {
+    background: rgba(0,212,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .percept-title {
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .percept-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 24px;
+  }
+
+  .badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-family: 'Orbitron', monospace;
+    font-weight: 700;
+    letter-spacing: 1px;
+    animation: badge-in 0.3s ease;
+  }
+
+  @keyframes badge-in {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .badge-breeze { background: rgba(0,150,255,0.2); color: #66ccff; border: 1px solid #0096ff; }
+  .badge-stench { background: rgba(180,0,255,0.2); color: #cc88ff; border: 1px solid #b400ff; }
+  .badge-glitter { background: rgba(255,215,0,0.2); color: #ffd700; border: 1px solid #ffd700; }
+  .badge-none { color: var(--dim); font-size: 0.6rem; font-style: italic; }
+
+  .grid-area-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    color: var(--dim);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+
+  /* Progress bar for safe probability */
+  .prob-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .prob-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  .prob-fill.safe { background: var(--safe); }
+  .prob-fill.danger { background: var(--danger); }
+
+  #resolution-steps {
+    font-family: 'Orbitron', monospace;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚡ WUMPUS LOGIC AGENT</h1>
+    <div class="subtitle">Knowledge-Based Propositional Reasoning System</div>
+  </div>
+  <div class="status-dot" id="status-dot"></div>
+</header>
+
+<div class="main">
+  <!-- LEFT PANEL: Controls -->
+  <div class="side-panel">
+    <div class="panel-header">⚙ CONFIGURATION</div>
+    <div class="panel-body">
+
+      <div class="control-group">
+        <div class="control-label">Grid Dimensions</div>
+        <div class="control-row">
+          <span style="font-size:0.7rem;color:var(--dim)">Rows:</span>
+          <input type="number" id="rows" value="4" min="3" max="8">
+          <span style="font-size:0.7rem;color:var(--dim)">Cols:</span>
+          <input type="number" id="cols" value="4" min="3" max="8">
+        </div>
+        <div class="control-label" style="margin-top:8px">Num Pits</div>
+        <div class="control-row">
+          <input type="number" id="num-pits" value="3" min="1" max="6" style="width:70px">
+          <span style="font-size:0.65rem;color:var(--dim)">pits in grid</span>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-new">🔄 NEW EPISODE</button>
+      <button class="btn btn-success" id="btn-step" disabled>▶ STEP</button>
+      <button class="btn btn-warning" id="btn-auto" disabled>⚡ AUTO RUN</button>
+      <button class="btn btn-primary" id="btn-stop" disabled style="margin-top:0">⏹ STOP</button>
+
+      <div class="control-group" style="margin-top:16px">
+        <div class="control-label">Auto Speed</div>
+        <div class="speed-control">
+          <button class="btn btn-primary speed-btn" data-speed="1000" onclick="setSpeed(1000,this)">0.5x</button>
+          <button class="btn btn-primary speed-btn active" data-speed="500" onclick="setSpeed(500,this)">1x</button>
+          <button class="btn btn-primary speed-btn" data-speed="200" onclick="setSpeed(200,this)">3x</button>
+          <button class="btn btn-primary speed-btn" data-speed="80" onclick="setSpeed(80,this)">Fast</button>
+        </div>
+      </div>
+
+      <div class="legend" style="margin-top:12px">
+        <div class="control-label" style="width:100%">Legend</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(0,255,136,0.3);border-color:var(--safe)"></div>Safe</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(0,100,180,0.3);border-color:#0096ff"></div>Visited</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(26,42,58,1);border-color:#1a3a5c"></div>Unknown</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,51,51,0.3);border-color:var(--danger)"></div>Danger</div>
+        <div class="legend-item"><span>🧑</span>Agent</div>
+        <div class="legend-item"><span>🐛</span>Wumpus</div>
+        <div class="legend-item"><span>🕳</span>Pit</div>
+        <div class="legend-item"><span>💰</span>Gold</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: Grid -->
+  <div class="grid-area">
+    <div class="grid-area-label">▸ NAVIGATION GRID — PROPOSITIONAL LOGIC ENGINE ◂</div>
+    <div class="grid-wrapper">
+      <div id="grid-container"></div>
+      <div class="overlay-msg" id="overlay">
+        <h2 id="overlay-title">—</h2>
+        <p id="overlay-msg">—</p>
+        <button class="btn btn-primary" style="width:auto;padding:10px 24px" onclick="document.getElementById('overlay').style.display='none'">DISMISS</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Metrics + KB -->
+  <div class="side-panel right">
+    <div class="panel-header">📊 METRICS & KNOWLEDGE BASE</div>
+    <div class="panel-body">
+
+      <div class="agent-status">
+        <div class="status-row">
+          <span class="status-key">Status</span>
+          <span class="status-val active" id="agent-status">READY</span>
+        </div>
+        <div class="status-row">
+          <span class="status-key">Position</span>
+          <span class="status-val" id="agent-pos">[—]</span>
+        </div>
+        <div class="status-row">
+          <span class="status-key">Arrow</span>
+          <span class="status-val" id="agent-arrow">Available</span>
+        </div>
+        <div class="status-row">
+          <span class="status-key">Score</span>
+          <span class="status-val" id="agent-score">0</span>
+        </div>
+      </div>
+
+      <div class="percept-display">
+        <div class="percept-title">Current Percepts</div>
+        <div class="percept-badges" id="percept-badges">
+          <span class="badge-none">None — start new episode</span>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-title">Inference Steps</div>
+        <div class="metric-value" id="resolution-steps">0</div>
+        <div class="metric-sub">Resolution Refutation calls</div>
+      </div>
+
+      <div class="metric-card" style="margin-bottom:8px">
+        <div class="metric-title">KB Clauses</div>
+        <div class="metric-value" id="kb-clauses">0</div>
+        <div class="metric-sub">clauses in knowledge base</div>
+      </div>
+
+      <div class="panel-header" style="margin: 0 -16px 8px; padding:10px 16px">📋 KB LOG</div>
+      <div class="kb-log" id="kb-log"></div>
+
+      <div class="panel-header" style="margin: 8px -16px 8px; padding:10px 16px">🔍 RESOLUTION TRACE</div>
+      <div class="inference-list" id="inference-list"></div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// WUMPUS WORLD - KNOWLEDGE-BASED AGENT WITH PROPOSITIONAL LOGIC
+// ============================================================
+
+let G = {
+  rows: 4, cols: 4,
+  cells: [],     // 2D: { pit, wumpus, gold, breeze, stench }
+  agent: { r:0, c:0 },
+  visited: new Set(),
+  safe: new Set(),
+  dangerCells: new Set(),
+  hasArrow: true,
+  wumpusAlive: true,
+  score: 0,
+  goldPos: null,
+  gameOver: false,
+  won: false,
+  kb: [],        // CNF clauses [{literals:[...]}]
+  inferenceCount: 0,
+  kbClauseCount: 0,
+  autoInterval: null,
+  autoSpeed: 500,
+  frontier: [],  // cells to visit
+  visitStack: [],
+};
+
+// ---- KB UTILITIES ----
+function makeVar(type, r, c) { return `${type}_${r}_${c}`; }
+
+function kbTell(clause) {
+  // clause is array of literals (strings, negated with -)
+  G.kb.push(clause);
+  G.kbClauseCount = G.kb.length;
+  updateMetric('kb-clauses', G.kbClauseCount);
+}
+
+// Convert KB to CNF and run Resolution Refutation
+// Returns true if negation of query leads to contradiction (query is entailed)
+function kbAsk(queryVar) {
+  G.inferenceCount++;
+  updateMetric('resolution-steps', G.inferenceCount);
+
+  logInference(`--- Resolution #${G.inferenceCount}: Prove ${queryVar} ---`);
+
+  // Negate the query and add to working set
+  const negQuery = queryVar.startsWith('-') ? queryVar.slice(1) : `-${queryVar}`;
+  const clauses = [...G.kb.map(c => [...c]), [negQuery]];
+
+  logInference(`Adding negated query: {${negQuery}}`);
+
+  // Resolution algorithm
+  let newClauses = [];
+  const seen = new Set(clauses.map(c => c.sort().join(',')));
+  let steps = 0;
+  const maxSteps = 300;
+
+  while (steps < maxSteps) {
+    steps++;
+    let foundNew = false;
+
+    for (let i = 0; i < clauses.length; i++) {
+      for (let j = i+1; j < clauses.length; j++) {
+        const resolvents = resolve(clauses[i], clauses[j]);
+
+        for (const r of resolvents) {
+          if (r.length === 0) {
+            // Empty clause = contradiction = query is proved
+            logInference(`✓ CONTRADICTION — ${queryVar.replace('-','')} is ENTAILED`, 'contra');
+            return true;
+          }
+          const key = [...r].sort().join(',');
+          if (!seen.has(key)) {
+            seen.add(key);
+            newClauses.push(r);
+            foundNew = true;
+            if (r.length <= 2) logInference(`Resolvent: {${r.join(',')}}`, 'resolve');
+          }
+        }
+      }
+    }
+
+    if (!foundNew) {
+      logInference(`✗ No contradiction — ${queryVar.replace('-','')} not proved`, 'resolve');
+      return false;
+    }
+
+    clauses.push(...newClauses);
+    newClauses = [];
+  }
+
+  return false;
+}
+
+function resolve(c1, c2) {
+  const results = [];
+  for (const lit of c1) {
+    const neg = lit.startsWith('-') ? lit.slice(1) : `-${lit}`;
+    if (c2.includes(neg)) {
+      const r = [...c1.filter(l=>l!==lit), ...c2.filter(l=>l!==neg)];
+      // Remove duplicates and tautologies
+      const unique = [...new Set(r)];
+      let taut = false;
+      for (const l of unique) {
+        const n = l.startsWith('-') ? l.slice(1) : `-${l}`;
+        if (unique.includes(n)) { taut = true; break; }
+      }
+      if (!taut) results.push(unique);
+    }
+  }
+  return results;
+}
+
+// ---- GAME SETUP ----
+function newEpisode() {
+  stopAuto();
+  const rows = parseInt(document.getElementById('rows').value);
+  const cols = parseInt(document.getElementById('cols').value);
+  const numPits = parseInt(document.getElementById('num-pits').value);
+
+  G = {
+    rows, cols,
+    cells: [],
+    agent: { r: rows-1, c: 0 }, // Start bottom-left
+    visited: new Set(),
+    safe: new Set(),
+    dangerCells: new Set(),
+    hasArrow: true,
+    wumpusAlive: true,
+    score: 0,
+    goldPos: null,
+    gameOver: false,
+    won: false,
+    kb: [],
+    inferenceCount: 0,
+    kbClauseCount: 0,
+    autoInterval: null,
+    autoSpeed: G.autoSpeed,
+    frontier: [],
+    visitStack: [],
+    wumpusPos: null,
+  };
+
+  // Initialize cells
+  for (let r = 0; r < rows; r++) {
+    G.cells[r] = [];
+    for (let c = 0; c < cols; c++) {
+      G.cells[r][c] = { pit:false, wumpus:false, gold:false, breeze:false, stench:false };
+    }
+  }
+
+  // Place Wumpus (not at start)
+  let wr, wc;
+  do {
+    wr = Math.floor(Math.random() * rows);
+    wc = Math.floor(Math.random() * cols);
+  } while (wr === rows-1 && wc === 0);
+  G.cells[wr][wc].wumpus = true;
+  G.wumpusPos = {r:wr, c:wc};
+
+  // Place Pits (not at start, not wumpus)
+  let pitCount = 0;
+  const maxPits = Math.min(numPits, rows*cols - 3);
+  let attempts = 0;
+  while (pitCount < maxPits && attempts < 200) {
+    attempts++;
+    const pr = Math.floor(Math.random() * rows);
+    const pc = Math.floor(Math.random() * cols);
+    if ((pr === rows-1 && pc === 0) || G.cells[pr][pc].wumpus || G.cells[pr][pc].pit) continue;
+    G.cells[pr][pc].pit = true;
+    pitCount++;
+  }
+
+  // Place Gold
+  let gr, gc;
+  do {
+    gr = Math.floor(Math.random() * rows);
+    gc = Math.floor(Math.random() * cols);
+  } while ((gr === rows-1 && gc === 0) || G.cells[gr][gc].pit || G.cells[gr][gc].wumpus);
+  G.cells[gr][gc].gold = true;
+  G.goldPos = {r:gr, c:gc};
+
+  // Compute breezes and stenches
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const neighbors = getNeighbors(r, c);
+      for (const [nr, nc] of neighbors) {
+        if (G.cells[nr][nc].pit) G.cells[r][c].breeze = true;
+        if (G.cells[nr][nc].wumpus) G.cells[r][c].stench = true;
+      }
+    }
+  }
+
+  // Initialize KB with start cell safe
+  const startKey = cellKey(rows-1, 0);
+  G.safe.add(startKey);
+  kbTell([makeVar('S', rows-1, 0)]); // start is safe
+  kbTell([`-${makeVar('P', rows-1, 0)}`]); // no pit at start
+  kbTell([`-${makeVar('W', rows-1, 0)}`]); // no wumpus at start
+
+  // Agent starts at bottom-left
+  G.visitStack = [{r: rows-1, c: 0}];
+
+  // Clear UI
+  clearLog();
+  clearInference();
+  document.getElementById('overlay').style.display = 'none';
+  setAgentStatus('ACTIVE', 'active');
+  document.getElementById('agent-score').textContent = '0';
+  document.getElementById('agent-arrow').textContent = 'Available';
+  updatePercepts([]);
+
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('btn-auto').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+
+  buildGrid();
+  logKB(`[SYSTEM] New ${rows}×${cols} grid. ${pitCount} pits. Wumpus placed. Gold placed.`, 'system');
+  logKB(`[SYSTEM] Agent starts at (${rows-1},0). KB initialized.`, 'system');
+  updateMetric('resolution-steps', 0);
+  updateMetric('kb-clauses', G.kb.length);
+}
+
+function cellKey(r, c) { return `${r},${c}`; }
+
+function getNeighbors(r, c) {
+  const n = [];
+  if (r > 0) n.push([r-1, c]);
+  if (r < G.rows-1) n.push([r+1, c]);
+  if (c > 0) n.push([r, c-1]);
+  if (c < G.cols-1) n.push([r, c+1]);
+  return n;
+}
+
+// ---- AGENT STEP ----
+function agentStep() {
+  if (G.gameOver) return;
+
+  const {r, c} = G.agent;
+  const key = cellKey(r, c);
+  const cell = G.cells[r][c];
+
+  // Mark visited
+  G.visited.add(key);
+  G.score -= 1; // step cost
+
+  // Check for death
+  if (cell.pit) {
+    G.score -= 1000;
+    G.gameOver = true;
+    logKB(`[DEAD] Fell into PIT at (${r},${c})! Score: ${G.score}`, 'dead');
+    setAgentStatus('DEAD', 'dead');
+    showOverlay('dead', '💀 AGENT DIED', `Fell into a pit at (${r},${c}). Final score: ${G.score}`);
+    renderGrid();
+    stopAuto();
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('btn-auto').disabled = true;
+    return;
+  }
+
+  if (cell.wumpus && G.wumpusAlive) {
+    G.score -= 1000;
+    G.gameOver = true;
+    logKB(`[DEAD] Eaten by WUMPUS at (${r},${c})! Score: ${G.score}`, 'dead');
+    setAgentStatus('DEAD', 'dead');
+    showOverlay('dead', '🐛 EATEN BY WUMPUS', `The Wumpus devoured the agent at (${r},${c}). Final score: ${G.score}`);
+    renderGrid();
+    stopAuto();
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('btn-auto').disabled = true;
+    return;
+  }
+
+  // Collect gold
+  if (cell.gold) {
+    G.score += 1000;
+    G.cells[r][c].gold = false;
+    G.won = true;
+    G.gameOver = true;
+    logKB(`[WIN] 💰 GOLD GRABBED at (${r},${c})! Score: ${G.score}`, 'win');
+    setAgentStatus('WON', 'won');
+    showOverlay('win', '💰 GOLD FOUND!', `Agent grabbed the gold at (${r},${c}). Final score: ${G.score}`);
+    renderGrid();
+    stopAuto();
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('btn-auto').disabled = true;
+    return;
+  }
+
+  // Get percepts
+  const percepts = [];
+  if (cell.breeze) percepts.push('BREEZE');
+  if (cell.stench) percepts.push('STENCH');
+  updatePercepts(percepts);
+
+  logKB(`[MOVE] Agent at (${r},${c}) | Percepts: ${percepts.length ? percepts.join(', ') : 'None'}`, 'move');
+
+  // TELL KB the percepts
+  if (cell.breeze) {
+    logKB(`[TELL] B_${r}_${c} ⟺ P adj(${r},${c})`, 'tell');
+    // B_r_c => P_n1 | P_n2 | ...
+    const nbrs = getNeighbors(r, c);
+    const pitLits = nbrs.map(([nr,nc]) => makeVar('P', nr, nc));
+    kbTell(pitLits); // B => disjunction of adjacent pits
+    // Also: ~B => ~P for each neighbor (if no breeze, no adjacent pit)
+  } else {
+    // No breeze: no adjacent pits
+    logKB(`[TELL] ¬B_${r}_${c} → no pits adjacent`, 'tell');
+    for (const [nr, nc] of getNeighbors(r, c)) {
+      kbTell([`-${makeVar('P', nr, nc)}`]);
+    }
+  }
+
+  if (cell.stench) {
+    logKB(`[TELL] S_${r}_${c} ⟺ W adj(${r},${c})`, 'tell');
+    const nbrs = getNeighbors(r, c);
+    const wLits = nbrs.map(([nr,nc]) => makeVar('W', nr, nc));
+    kbTell(wLits);
+  } else {
+    logKB(`[TELL] ¬S_${r}_${c} → no Wumpus adjacent`, 'tell');
+    for (const [nr, nc] of getNeighbors(r, c)) {
+      kbTell([`-${makeVar('W', nr, nc)}`]);
+    }
+  }
+
+  // Tell KB current cell is safe (we're alive here)
+  kbTell([`-${makeVar('P', r, c)}`]);
+  kbTell([`-${makeVar('W', r, c)}`]);
+
+  // Check & infer safety of neighbors
+  const nbrs = getNeighbors(r, c);
+  const safeNeighbors = [];
+  const dangerNeighbors = [];
+
+  for (const [nr, nc] of nbrs) {
+    const nkey = cellKey(nr, nc);
+    if (G.visited.has(nkey) || G.safe.has(nkey)) continue;
+
+    logKB(`[ASK] Is (${nr},${nc}) safe? Checking ¬P ∧ ¬W...`, 'ask');
+
+    // Ask KB: can we prove ~P_nr_nc AND ~W_nr_nc?
+    const noP = kbAsk(`-${makeVar('P', nr, nc)}`);
+    const noW = kbAsk(`-${makeVar('W', nr, nc)}`);
+
+    if (noP && noW) {
+      G.safe.add(nkey);
+      G.dangerCells.delete(nkey);
+      safeNeighbors.push([nr, nc]);
+      logKB(`[SAFE] (${nr},${nc}) proven SAFE by resolution!`, 'safe');
+      kbTell([makeVar('S', nr, nc)]);
+    } else {
+      // Might be danger
+      if (!noP) {
+        logKB(`[?] (${nr},${nc}) — pit possible`, 'infer');
+        dangerNeighbors.push([nr, nc]);
+        if (!G.safe.has(nkey)) G.dangerCells.add(nkey);
+      }
+    }
+  }
+
+  // Choose next move: prefer safe unvisited cells
+  let nextMove = null;
+
+  // Try to find safe unvisited neighbor first
+  for (const [nr, nc] of nbrs) {
+    const nkey = cellKey(nr, nc);
+    if (!G.visited.has(nkey) && G.safe.has(nkey)) {
+      nextMove = {r: nr, c: nc};
+      break;
+    }
+  }
+
+  // If no safe neighbor, try globally safe unvisited
+  if (!nextMove) {
+    for (const safeKey of G.safe) {
+      if (!G.visited.has(safeKey)) {
+        const [sr, sc] = safeKey.split(',').map(Number);
+        nextMove = {r: sr, c: sc};
+        break;
+      }
+    }
+  }
+
+  // If still no move, try unvisited neighbor (risk it or explore)
+  if (!nextMove) {
+    // Try non-danger neighbors
+    for (const [nr, nc] of nbrs) {
+      const nkey = cellKey(nr, nc);
+      if (!G.visited.has(nkey) && !G.dangerCells.has(nkey)) {
+        nextMove = {r: nr, c: nc};
+        break;
+      }
+    }
+  }
+
+  // If absolutely nothing, try any unvisited neighbor
+  if (!nextMove) {
+    for (const [nr, nc] of nbrs) {
+      if (!G.visited.has(cellKey(nr, nc))) {
+        nextMove = {r: nr, c: nc};
+        break;
+      }
+    }
+  }
+
+  // Update score display
+  document.getElementById('agent-score').textContent = G.score;
+
+  renderGrid();
+
+  // Move agent
+  if (nextMove) {
+    G.agent = nextMove;
+    logKB(`[MOVE] Moving to (${nextMove.r},${nextMove.c})`, 'move');
+  } else {
+    logKB(`[SYSTEM] No unvisited cells reachable. Episode ends.`, 'system');
+    G.gameOver = true;
+    stopAuto();
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('btn-auto').disabled = true;
+    setAgentStatus('STUCK', 'dead');
+  }
+}
+
+// ---- GRID RENDERING ----
+function buildGrid() {
+  const gc = document.getElementById('grid-container');
+  gc.style.gridTemplateColumns = `repeat(${G.cols}, 60px)`;
+  gc.innerHTML = '';
+  for (let r = 0; r < G.rows; r++) {
+    for (let c = 0; c < G.cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.id = `cell-${r}-${c}`;
+      gc.appendChild(cell);
+    }
+  }
+  renderGrid();
+}
+
+function renderGrid() {
+  for (let r = 0; r < G.rows; r++) {
+    for (let c = 0; c < G.cols; c++) {
+      const el = document.getElementById(`cell-${r}-${c}`);
+      if (!el) continue;
+      const key = cellKey(r, c);
+      const isAgent = G.agent.r === r && G.agent.c === c;
+      const isVisited = G.visited.has(key);
+      const isSafe = G.safe.has(key);
+      const isDanger = G.dangerCells.has(key);
+      const cell = G.cells[r][c];
+
+      // CSS class
+      el.className = 'cell';
+      if (isAgent) el.classList.add('agent-here');
+      else if (isVisited) el.classList.add('visited');
+      else if (isDanger && !isSafe) el.classList.add('danger');
+      else if (isSafe && !isVisited) el.classList.add('safe');
+
+      // Content
+      let emoji = '';
+      let showPercepts = [];
+
+      if (isAgent) emoji += '🧑';
+
+      // After game over, reveal everything
+      if (G.gameOver) {
+        if (cell.pit) emoji += '🕳';
+        if (cell.wumpus && G.wumpusAlive) emoji += '🐛';
+        if (cell.gold) emoji += '💰';
+        if (isVisited && cell.breeze) showPercepts.push({cls:'percept-breeze', t:'B'});
+        if (isVisited && cell.stench) showPercepts.push({cls:'percept-stench', t:'S'});
+      } else {
+        // Only show what agent knows
+        if (isVisited) {
+          if (cell.breeze) showPercepts.push({cls:'percept-breeze', t:'B'});
+          if (cell.stench) showPercepts.push({cls:'percept-stench', t:'S'});
+          if (cell.gold) emoji += '💰';
+        } else {
+          if (isSafe) {} // green
+          else if (isDanger) emoji += '❓';
+        }
+      }
+
+      el.innerHTML = `
+        <span class="cell-label">${r},${c}</span>
+        <span style="font-size:1.2rem">${emoji}</span>
+        <div class="percepts">${showPercepts.map(p=>`<span class="percept-tag ${p.cls}">${p.t}</span>`).join('')}</div>
+      `;
+    }
+  }
+}
+
+// ---- UI HELPERS ----
+function logKB(msg, type='system') {
+  const log = document.getElementById('kb-log');
+  const el = document.createElement('div');
+  el.className = `kb-entry kb-${type}`;
+  el.textContent = msg;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('kb-log').innerHTML = '';
+}
+
+function logInference(msg, type='inf-step') {
+  const list = document.getElementById('inference-list');
+  const el = document.createElement('div');
+  el.className = type === 'contra' ? 'inf-step inf-contra' : type === 'resolve' ? 'inf-resolve' : 'inf-step';
+  el.textContent = msg;
+  list.appendChild(el);
+  list.scrollTop = list.scrollHeight;
+}
+
+function clearInference() {
+  document.getElementById('inference-list').innerHTML = '';
+}
+
+function updateMetric(id, val) {
+  document.getElementById(id).textContent = val;
+}
+
+function setAgentStatus(text, cls) {
+  const el = document.getElementById('agent-status');
+  el.textContent = text;
+  el.className = `status-val ${cls}`;
+  document.getElementById('agent-pos').textContent = `(${G.agent.r},${G.agent.c})`;
+}
+
+function updatePercepts(list) {
+  const el = document.getElementById('percept-badges');
+  if (!list.length) {
+    el.innerHTML = '<span class="badge-none">None</span>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    if (p === 'BREEZE') return '<span class="badge badge-breeze">BREEZE</span>';
+    if (p === 'STENCH') return '<span class="badge badge-stench">STENCH</span>';
+    if (p === 'GLITTER') return '<span class="badge badge-glitter">GLITTER</span>';
+    return '';
+  }).join('');
+}
+
+function showOverlay(type, title, msg) {
+  const ov = document.getElementById('overlay');
+  ov.className = `overlay-msg ${type}`;
+  ov.style.display = 'block';
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-msg').textContent = msg;
+}
+
+function setSpeed(ms, btn) {
+  G.autoSpeed = ms;
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (G.autoInterval) {
+    stopAuto();
+    startAuto();
+  }
+}
+
+function startAuto() {
+  G.autoInterval = setInterval(() => {
+    if (G.gameOver) { stopAuto(); return; }
+    agentStep();
+    document.getElementById('agent-pos').textContent = `(${G.agent.r},${G.agent.c})`;
+  }, G.autoSpeed);
+  document.getElementById('btn-auto').disabled = true;
+  document.getElementById('btn-step').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+}
+
+function stopAuto() {
+  if (G.autoInterval) { clearInterval(G.autoInterval); G.autoInterval = null; }
+  if (!G.gameOver) {
+    document.getElementById('btn-auto').disabled = false;
+    document.getElementById('btn-step').disabled = false;
+  }
+  document.getElementById('btn-stop').disabled = true;
+}
+
+// ---- EVENT LISTENERS ----
+document.getElementById('btn-new').addEventListener('click', newEpisode);
+document.getElementById('btn-step').addEventListener('click', () => {
+  agentStep();
+  document.getElementById('agent-pos').textContent = `(${G.agent.r},${G.agent.c})`;
+});
+document.getElementById('btn-auto').addEventListener('click', startAuto);
+document.getElementById('btn-stop').addEventListener('click', stopAuto);
+
+// Initial render
+newEpisode();
+</script>
+</body>
+</html>
